@@ -6,23 +6,61 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download images from Wikimedia
+      - name: Download real paper images
         run: |
-          mkdir -p images
-          cd images
-          curl -sL --max-time 30 -o principia_1plus1.png "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Principia_Mathematica_54-43.png/800px-Principia_Mathematica_54-43.png"
-          curl -sL --max-time 30 -o frege_notation.png "https://upload.wikimedia.org/wikipedia/commons/0/0b/Begriffsschrift_connective.png"
-          curl -sL --max-time 30 -o george_boole.jpg "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/George_Boole.jpg/400px-George_Boole.jpg"
-          curl -sL --max-time 30 -o xor_venn.png "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/Venn_diagram_of_XOR.svg/600px-Venn_diagram_of_XOR.svg.png"
-          curl -sL --max-time 30 -o tractatus_cover.jpg "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Tractatus_title_page_1922.jpg/400px-Tractatus_title_page_1922.jpg"
-          curl -sL --max-time 30 -o neural_network.png "https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Colored_neural_network.svg/800px-Colored_neural_network.svg.png"
-          curl -sL --max-time 30 -o boolean_lattice.png "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Boolean_algebra_laws.svg/600px-Boolean_algebra_laws.svg.png"
-          curl -sL --max-time 30 -o square_opposition.png "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Square_of_opposition%2C_set_diagrams.svg/600px-Square_of_opposition%2C_set_diagrams.svg.png"
-          curl -sL --max-time 30 -o truth_tables.jpg "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Truth_table_3._JPG.jpg/600px-Truth_table_3._JPG.jpg"
-          curl -sL --max-time 30 -o huntington_lattice.png "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Hasse_diagram_of_boolean_algebra.svg/400px-Hasse_diagram_of_boolean_algebra.svg.png"
+          mkdir -p images && cd images
+          
+          # Use Wikimedia API to find correct image URLs first, then download
+          echo "=== 1. Principia Mathematica *54.43 ==="
+          curl -sL "https://en.wikipedia.org/w/api.php?action=query&titles=Principia_Mathematica&prop=pageimages&format=json&pithumbsize=800" -o pm.json
+          cat pm.json | python3 -c "
+          import json,sys,urllib.request
+          d=json.load(open('pm.json'))
+          for p in d.get('query',{}).get('pages',{}).values():
+              src=p.get('thumbnail',{}).get('source','')
+              if src: print(f'Found: {src}')
+          " 2>/dev/null
+          
+          # Direct known-working Wikimedia URLs
+          curl -sL --max-time 30 -o principia_1plus1.png \
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Principia_Mathematica_54-43.png/800px-Principia_Mathematica_54-43.png"
+          
+          curl -sL --max-time 30 -o george_boole.jpg \
+            "https://upload.wikimedia.org/wikipedia/commons/a/a1/George_Boole.jpg"
+          
+          curl -sL --max-time 30 -o xor_venn.png \
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/Venn_diagram_of_XOR.svg/600px-Venn_diagram_of_XOR.svg.png"
+          
+          curl -sL --max-time 30 -o tractatus_cover.jpg \
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Tractatus_title_page_1922.jpg/400px-Tractatus_title_page_1922.jpg"
+
+          curl -sL --max-time 30 -o neural_network.png \
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Artificial_neural_network.svg/800px-Artificial_neural_network.svg.png"
+
+          curl -sL --max-time 30 -o boolean_lattice.png \
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Boolean_algebra_laws.svg/600px-Boolean_algebra_laws.svg.png"
+
+          curl -sL --max-time 30 -o square_opposition.png \
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Square_of_opposition%2C_set_diagrams.svg/600px-Square_of_opposition%2C_set_diagrams.svg.png"
+
+          curl -sL --max-time 30 -o truth_tables.jpg \
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Truth_table_3._JPG.jpg/600px-Truth_table_3._JPG.jpg"
+
+          curl -sL --max-time 30 -o huntington_lattice.png \
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Hasse_diagram_of_boolean_algebra.svg/400px-Hasse_diagram_of_boolean_algebra.svg.png"
+
+          curl -sL --max-time 30 -o frege_notation.png \
+            "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7c/Freges_Begriffsschrift_1879_original_notation.png/600px-Freges_Begriffsschrift_1879_original_notation.png"
+          
           echo "=== Results ===" && ls -lh
-          for f in *; do [ -s "$f" ] && echo "OK: $f" || echo "FAIL: $f"; done
+          for f in *; do
+            if file "$f" | grep -q "PNG\|JPEG\|SVG"; then
+              echo "OK: $f ($(wc -c < $f) bytes)"
+            else
+              echo "FAIL: $f - $(head -c 60 $f)"
+            fi
+          done
       - name: Commit
         run: |
-          git config user.name "知涧Bot"; git config user.email "bot@zhijian.ai"
-          git add images/; git diff --staged --quiet || (git commit -m "Paper images from Wikimedia" && git push)
+          git config user.name "Bot"; git config user.email "bot@zhijian.ai"
+          git add images/; git diff --staged --quiet || (git commit -m "Fix: correct Wikimedia URLs" && git push)
