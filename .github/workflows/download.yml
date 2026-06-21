@@ -1,0 +1,28 @@
+name: Download Paper Images
+on: [workflow_dispatch, push]
+permissions: write-all
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download images from Wikimedia
+        run: |
+          mkdir -p images
+          cd images
+          curl -sL --max-time 30 -o principia_1plus1.png "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Principia_Mathematica_54-43.png/800px-Principia_Mathematica_54-43.png"
+          curl -sL --max-time 30 -o frege_notation.png "https://upload.wikimedia.org/wikipedia/commons/0/0b/Begriffsschrift_connective.png"
+          curl -sL --max-time 30 -o george_boole.jpg "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/George_Boole.jpg/400px-George_Boole.jpg"
+          curl -sL --max-time 30 -o xor_venn.png "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/Venn_diagram_of_XOR.svg/600px-Venn_diagram_of_XOR.svg.png"
+          curl -sL --max-time 30 -o tractatus_cover.jpg "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Tractatus_title_page_1922.jpg/400px-Tractatus_title_page_1922.jpg"
+          curl -sL --max-time 30 -o neural_network.png "https://upload.wikimedia.org/wikipedia/commons/thumb/4/46/Colored_neural_network.svg/800px-Colored_neural_network.svg.png"
+          curl -sL --max-time 30 -o boolean_lattice.png "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Boolean_algebra_laws.svg/600px-Boolean_algebra_laws.svg.png"
+          curl -sL --max-time 30 -o square_opposition.png "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Square_of_opposition%2C_set_diagrams.svg/600px-Square_of_opposition%2C_set_diagrams.svg.png"
+          curl -sL --max-time 30 -o truth_tables.jpg "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Truth_table_3._JPG.jpg/600px-Truth_table_3._JPG.jpg"
+          curl -sL --max-time 30 -o huntington_lattice.png "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Hasse_diagram_of_boolean_algebra.svg/400px-Hasse_diagram_of_boolean_algebra.svg.png"
+          echo "=== Results ===" && ls -lh
+          for f in *; do [ -s "$f" ] && echo "OK: $f" || echo "FAIL: $f"; done
+      - name: Commit
+        run: |
+          git config user.name "知涧Bot"; git config user.email "bot@zhijian.ai"
+          git add images/; git diff --staged --quiet || (git commit -m "Paper images from Wikimedia" && git push)
