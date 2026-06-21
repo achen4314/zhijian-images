@@ -1,4 +1,4 @@
-name: Download Paper Images v3
+name: Download Paper Images v4
 on: [workflow_dispatch, push]
 permissions: write-all
 jobs:
@@ -6,68 +6,53 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download images via Wikimedia API
+      - name: Scrape Wikipedia for real image URLs
         run: |
           mkdir -p images && cd images
           
-          # Use Wikimedia Commons API to find and download files
-          download_wikimedia() {
-            local filename=$1
-            local search=$2
-            echo "=== Searching: $search ==="
+          # Scrape Wikipedia pages to extract actual img src URLs, then download
+          download_from_wiki() {
+            local wiki_page=$1
+            local filename=$2
+            local search_pattern=$3
+            echo "=== $filename from $wiki_page ==="
             
-            # Search Wikimedia Commons for the file
-            local title=$(curl -s "https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${search}&srnamespace=6&format=json" | python3 -c "
-          import sys,json
-          d=json.load(sys.stdin)
-          results=d.get('query',{}).get('search',[])
-          if results: print(results[0]['title'].replace(' ','_'))
-          " 2>/dev/null)
-          
-            if [ -z "$title" ]; then
-              echo "  Not found via search, trying direct URL"
-              return 1
-            fi
-            echo "  Found: $title"
+            # Fetch the Wikipedia page HTML
+            curl -s "https://en.wikipedia.org/wiki/${wiki_page}" > page.html
             
-            # Get the actual image URL
-            local url=$(curl -s "https://commons.wikimedia.org/w/api.php?action=query&titles=${title}&prop=imageinfo&iiprop=url&format=json" | python3 -c "
-          import sys,json
-          d=json.load(sys.stdin)
-          for p in d.get('query',{}).get('pages',{}).values():
-              ii=p.get('imageinfo',[{}])
-              if ii: print(ii[0].get('url',''))
-          " 2>/dev/null)
-          
-            if [ -z "$url" ]; then
-              echo "  No URL found"
-              return 1
+            # Extract image URLs matching the search pattern
+            grep -oP 'src="[^"]*upload\.wikimedia\.org[^"]*'"${search_pattern}"'[^"]*"' page.html | head -3 > urls.txt
+            cat urls.txt | while read line; do echo "  Found: ${line:0:80}..."; done
+            
+            # Get the first matching URL and download
+            local url=$(head -1 urls.txt | sed 's/src="//;s/"//')
+            if [ -n "$url" ]; then
+              curl -sL --max-time 30 -o "$filename" "$url" && echo "  OK: $(wc -c < $filename)B" || echo "  FAIL"
+            else
+              echo "  No matching image found"
             fi
-            echo "  URL: ${url:0:80}..."
-            curl -sL --max-time 30 -o "$filename" "$url" && echo "  OK: $(wc -c < $filename) bytes" || echo "  FAIL"
           }
           
-          # Download each image
-          download_wikimedia "principia_1plus1.png" "Principia_Mathematica_54_43"
-          download_wikimedia "george_boole.jpg" "George_Boole_portrait"
-          download_wikimedia "xor_venn.png" "XOR_perceptron_venn"
-          download_wikimedia "tractatus_cover.jpg" "Tractatus_Logico_Philosophicus_title"
-          download_wikimedia "neural_network.png" "artificial_neural_network_multilayer"
-          download_wikimedia "boolean_lattice.png" "Boolean_algebra_laws"
-          download_wikimedia "square_opposition.png" "Square_of_opposition_set_diagrams"
-          download_wikimedia "truth_tables.png" "Truth_table_example"
-          download_wikimedia "huntington_lattice.png" "Hasse_diagram_boolean"
-          download_wikimedia "frege_notation.png" "Frege_Begriffsschrift_notation"
+          # Download each via Wikipedia page scraping
+          download_from_wiki "Principia_Mathematica" "principia_1plus1.png" "Principia"
+          download_from_wiki "George_Boole" "george_boole.jpg" "George_Boole"
+          download_from_wiki "Exclusive_or" "xor_venn.png" "Venn.*XOR\|XOR.*Venn"
+          download_from_wiki "Tractatus_Logico-Philosophicus" "tractatus_cover.jpg" "Tractatus"
+          download_from_wiki "Artificial_neural_network" "neural_network.png" "Colored.neural\|Artificial.neural"
+          download_from_wiki "Boolean_algebra" "boolean_lattice.png" "Boolean"
+          download_from_wiki "Square_of_opposition" "square_opposition.png" "Square.*opposition"
+          download_from_wiki "Truth_table" "truth_tables.png" "Truth_table"
+          download_from_wiki "Hasse_diagram" "huntington_lattice.png" "Hasse.*boolean\|Boolean.*Hasse\|Boolean.*lattice"
+          download_from_wiki "Begriffsschrift" "frege_notation.png" "Begriffsschrift\|Frege.*notation\|Frege.*Begriff"
           
-          echo "=== Final Results ===" && ls -lh
+          echo "=== Final Results ==="; ls -lh
           for f in *; do
-            if file "$f" | grep -qE "PNG|JPEG|SVG|image"; then
-              echo "OK: $f ($(wc -c < $f)B)"
-            else
-              echo "FAIL: $f ($(head -c 40 $f))"
-            fi
+            if [ -s "$f" ]; then
+              if file "$f" | grep -qE "PNG|JPEG|image"; then echo "OK: $f ($(wc -c < $f)B)"
+              else echo "MAYBE: $f ($(head -c 30 $f))"; fi
+            else echo "FAIL: $f (empty)"; fi
           done
       - name: Commit
         run: |
           git config user.name "Bot"; git config user.email "bot@zhijian.ai"
-          git add images/; git diff --staged --quiet || (git commit -m "v3: API-based image download" && git push)
+          git add images/; git diff --staged --quiet || (git commit -m "v4: Scrape Wikipedia for images" && git push)
