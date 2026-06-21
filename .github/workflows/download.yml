@@ -1,4 +1,4 @@
-name: Download Paper Images
+name: Download Paper Images v3
 on: [workflow_dispatch, push]
 permissions: write-all
 jobs:
@@ -6,61 +6,68 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download real paper images
+      - name: Download images via Wikimedia API
         run: |
           mkdir -p images && cd images
           
-          # Use Wikimedia API to find correct image URLs first, then download
-          echo "=== 1. Principia Mathematica *54.43 ==="
-          curl -sL "https://en.wikipedia.org/w/api.php?action=query&titles=Principia_Mathematica&prop=pageimages&format=json&pithumbsize=800" -o pm.json
-          cat pm.json | python3 -c "
-          import json,sys,urllib.request
-          d=json.load(open('pm.json'))
+          # Use Wikimedia Commons API to find and download files
+          download_wikimedia() {
+            local filename=$1
+            local search=$2
+            echo "=== Searching: $search ==="
+            
+            # Search Wikimedia Commons for the file
+            local title=$(curl -s "https://commons.wikimedia.org/w/api.php?action=query&list=search&srsearch=${search}&srnamespace=6&format=json" | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
+          results=d.get('query',{}).get('search',[])
+          if results: print(results[0]['title'].replace(' ','_'))
+          " 2>/dev/null)
+          
+            if [ -z "$title" ]; then
+              echo "  Not found via search, trying direct URL"
+              return 1
+            fi
+            echo "  Found: $title"
+            
+            # Get the actual image URL
+            local url=$(curl -s "https://commons.wikimedia.org/w/api.php?action=query&titles=${title}&prop=imageinfo&iiprop=url&format=json" | python3 -c "
+          import sys,json
+          d=json.load(sys.stdin)
           for p in d.get('query',{}).get('pages',{}).values():
-              src=p.get('thumbnail',{}).get('source','')
-              if src: print(f'Found: {src}')
-          " 2>/dev/null
+              ii=p.get('imageinfo',[{}])
+              if ii: print(ii[0].get('url',''))
+          " 2>/dev/null)
           
-          # Direct known-working Wikimedia URLs
-          curl -sL --max-time 30 -o principia_1plus1.png \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Principia_Mathematica_54-43.png/800px-Principia_Mathematica_54-43.png"
+            if [ -z "$url" ]; then
+              echo "  No URL found"
+              return 1
+            fi
+            echo "  URL: ${url:0:80}..."
+            curl -sL --max-time 30 -o "$filename" "$url" && echo "  OK: $(wc -c < $filename) bytes" || echo "  FAIL"
+          }
           
-          curl -sL --max-time 30 -o george_boole.jpg \
-            "https://upload.wikimedia.org/wikipedia/commons/a/a1/George_Boole.jpg"
+          # Download each image
+          download_wikimedia "principia_1plus1.png" "Principia_Mathematica_54_43"
+          download_wikimedia "george_boole.jpg" "George_Boole_portrait"
+          download_wikimedia "xor_venn.png" "XOR_perceptron_venn"
+          download_wikimedia "tractatus_cover.jpg" "Tractatus_Logico_Philosophicus_title"
+          download_wikimedia "neural_network.png" "artificial_neural_network_multilayer"
+          download_wikimedia "boolean_lattice.png" "Boolean_algebra_laws"
+          download_wikimedia "square_opposition.png" "Square_of_opposition_set_diagrams"
+          download_wikimedia "truth_tables.png" "Truth_table_example"
+          download_wikimedia "huntington_lattice.png" "Hasse_diagram_boolean"
+          download_wikimedia "frege_notation.png" "Frege_Begriffsschrift_notation"
           
-          curl -sL --max-time 30 -o xor_venn.png \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/Venn_diagram_of_XOR.svg/600px-Venn_diagram_of_XOR.svg.png"
-          
-          curl -sL --max-time 30 -o tractatus_cover.jpg \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Tractatus_title_page_1922.jpg/400px-Tractatus_title_page_1922.jpg"
-
-          curl -sL --max-time 30 -o neural_network.png \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Artificial_neural_network.svg/800px-Artificial_neural_network.svg.png"
-
-          curl -sL --max-time 30 -o boolean_lattice.png \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Boolean_algebra_laws.svg/600px-Boolean_algebra_laws.svg.png"
-
-          curl -sL --max-time 30 -o square_opposition.png \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Square_of_opposition%2C_set_diagrams.svg/600px-Square_of_opposition%2C_set_diagrams.svg.png"
-
-          curl -sL --max-time 30 -o truth_tables.jpg \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Truth_table_3._JPG.jpg/600px-Truth_table_3._JPG.jpg"
-
-          curl -sL --max-time 30 -o huntington_lattice.png \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Hasse_diagram_of_boolean_algebra.svg/400px-Hasse_diagram_of_boolean_algebra.svg.png"
-
-          curl -sL --max-time 30 -o frege_notation.png \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/7/7c/Freges_Begriffsschrift_1879_original_notation.png/600px-Freges_Begriffsschrift_1879_original_notation.png"
-          
-          echo "=== Results ===" && ls -lh
+          echo "=== Final Results ===" && ls -lh
           for f in *; do
-            if file "$f" | grep -q "PNG\|JPEG\|SVG"; then
-              echo "OK: $f ($(wc -c < $f) bytes)"
+            if file "$f" | grep -qE "PNG|JPEG|SVG|image"; then
+              echo "OK: $f ($(wc -c < $f)B)"
             else
-              echo "FAIL: $f - $(head -c 60 $f)"
+              echo "FAIL: $f ($(head -c 40 $f))"
             fi
           done
       - name: Commit
         run: |
           git config user.name "Bot"; git config user.email "bot@zhijian.ai"
-          git add images/; git diff --staged --quiet || (git commit -m "Fix: correct Wikimedia URLs" && git push)
+          git add images/; git diff --staged --quiet || (git commit -m "v3: API-based image download" && git push)
