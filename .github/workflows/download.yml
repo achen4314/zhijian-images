@@ -1,4 +1,4 @@
-name: Download Paper Images v7
+name: Download Paper Images v8
 on: [workflow_dispatch, push]
 permissions: write-all
 jobs:
@@ -6,45 +6,50 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download images
+      - name: Download with Python requests
         run: |
           cd images
-          rm -f *.png *.jpg *.svg 2>/dev/null
+          rm -f *.png *.jpg 2>/dev/null
           
-          curl -sL --max-time 30 -o principia_1plus1.png \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Principia_Mathematica_54-43.png/800px-Principia_Mathematica_54-43.png"
+          python3 << 'PYEOF'
+          import requests, os
           
-          curl -sL --max-time 30 -o george_boole.jpg \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/George_Boole.jpg/400px-George_Boole.jpg"
+          urls = {
+              "principia_1plus1.png": "https://upload.wikimedia.org/wikipedia/commons/thumb/f/f8/Principia_Mathematica_54-43.png/800px-Principia_Mathematica_54-43.png",
+              "george_boole.jpg": "https://upload.wikimedia.org/wikipedia/commons/thumb/a/a1/George_Boole.jpg/400px-George_Boole.jpg",
+              "frege_notation.png": "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0c/Begriffsschrift_Titel.png/600px-Begriffsschrift_Titel.png",
+              "tractatus_cover.jpg": "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Tractatus_title_page_1922.jpg/400px-Tractatus_title_page_1922.jpg",
+              "xor_venn.png": "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/Venn_diagram_of_XOR.svg/600px-Venn_diagram_of_XOR.svg.png",
+              "square_opposition.png": "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Square_of_opposition%2C_set_diagrams.svg/600px-Square_of_opposition%2C_set_diagrams.svg.png",
+              "truth_tables.jpg": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Truth_table_3._JPG.jpg/600px-Truth_table_3._JPG.jpg",
+              "boolean_lattice.png": "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Boolean_algebra_laws.svg/600px-Boolean_algebra_laws.svg.png",
+              "huntington_lattice.png": "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Hasse_diagram_of_boolean_algebra.svg/400px-Hasse_diagram_of_boolean_algebra.svg.png",
+              "neural_network.png": "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Artificial_neural_network.svg/800px-Artificial_neural_network.svg.png",
+          }
           
-          curl -sL --max-time 30 -o frege_notation.png \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/0/0c/Begriffsschrift_Titel.png/600px-Begriffsschrift_Titel.png"
+          headers = {"User-Agent": "ZhijianBot/1.0 (https://github.com/achen4314/zhijian-images; academic-research)"}
           
-          curl -sL --max-time 30 -o tractatus_cover.jpg \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/Tractatus_title_page_1922.jpg/400px-Tractatus_title_page_1922.jpg"
+          for filename, url in urls.items():
+              print(f"Downloading {filename}...")
+              try:
+                  r = requests.get(url, headers=headers, timeout=30)
+                  if r.status_code == 200 and len(r.content) > 500:
+                      with open(filename, 'wb') as f:
+                          f.write(r.content)
+                      print(f"  OK: {len(r.content)} bytes (status: {r.status_code})")
+                  else:
+                      print(f"  FAIL: HTTP {r.status_code}, {len(r.content)} bytes")
+              except Exception as e:
+                  print(f"  ERROR: {e}")
           
-          curl -sL --max-time 30 -o xor_venn.png \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/9/9f/Venn_diagram_of_XOR.svg/600px-Venn_diagram_of_XOR.svg.png"
-          
-          curl -sL --max-time 30 -o square_opposition.png \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Square_of_opposition%2C_set_diagrams.svg/600px-Square_of_opposition%2C_set_diagrams.svg.png"
-
-          curl -sL --max-time 30 -o truth_tables.jpg \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Truth_table_3._JPG.jpg/600px-Truth_table_3._JPG.jpg"
-
-          curl -sL --max-time 30 -o boolean_lattice.png \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/6/6f/Boolean_algebra_laws.svg/600px-Boolean_algebra_laws.svg.png"
-
-          curl -sL --max-time 30 -o huntington_lattice.png \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/c/cd/Hasse_diagram_of_boolean_algebra.svg/400px-Hasse_diagram_of_boolean_algebra.svg.png"
-
-          curl -sL --max-time 30 -o neural_network.png \
-            "https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Artificial_neural_network.svg/800px-Artificial_neural_network.svg.png"
-          
-          echo "=== Results ===" && ls -lh
-          for f in *; do echo "$f: $(wc -c < $f) bytes"; done
+          print("\n=== Summary ===")
+          for f in os.listdir("."):
+              if os.path.isfile(f):
+                  sz = os.path.getsize(f)
+                  print(f"  {f}: {sz} bytes")
+          PYEOF
       - name: Commit
         run: |
           git config user.name "Bot"; git config user.email "bot@zhijian.ai"
           cd images && rm -f *.html *.json *.txt fetch.py 2>/dev/null
-          git add images/; git diff --staged --quiet || (git commit -m "v7: thumbnail URLs" && git push)
+          git add images/; git diff --staged --quiet || (git commit -m "v8: Python requests with User-Agent" && git push)
