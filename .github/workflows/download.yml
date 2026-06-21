@@ -1,4 +1,4 @@
-name: Download Paper Images v5
+name: Download Paper Images v6
 on: [workflow_dispatch, push]
 permissions: write-all
 jobs:
@@ -6,61 +6,51 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Download via Wikipedia og:image extraction
+      - name: Download real paper images
         run: |
-          mkdir -p images && cd images
+          cd images
+          # Remove old failed downloads
+          rm -f *.png *.jpg 2>/dev/null
           
-          cat > fetch.py << 'PYEOF'
-          import urllib.request, re, sys, os
+          # Direct download from known-correct Wikimedia URLs
+          declare -A urls=(
+            ["principia_1plus1.png"]="https://upload.wikimedia.org/wikipedia/commons/f/f8/Principia_Mathematica_54-43.png"
+            ["george_boole.jpg"]="https://upload.wikimedia.org/wikipedia/commons/a/a1/George_Boole.jpg"
+            ["frege_notation.png"]="https://upload.wikimedia.org/wikipedia/commons/0/0c/Begriffsschrift_Titel.png"
+            ["tractatus_cover.jpg"]="https://upload.wikimedia.org/wikipedia/commons/1/1b/Tractatus_title_page_1922.jpg"
+            ["xor_venn.png"]="https://upload.wikimedia.org/wikipedia/commons/9/9f/Venn_diagram_of_XOR.svg"
+            ["square_opposition.png"]="https://upload.wikimedia.org/wikipedia/commons/8/8b/Square_of_opposition%2C_set_diagrams.svg"
+            ["truth_tables.png"]="https://upload.wikimedia.org/wikipedia/commons/4/43/Truth_table_3._JPG.jpg"
+            ["boolean_lattice.png"]="https://upload.wikimedia.org/wikipedia/commons/6/6f/Boolean_algebra_laws.svg"
+            ["huntington_lattice.png"]="https://upload.wikimedia.org/wikipedia/commons/c/cd/Hasse_diagram_of_boolean_algebra.svg"
+            ["neural_network.png"]="https://upload.wikimedia.org/wikipedia/commons/e/e4/Artificial_neural_network.svg"
+          )
           
-          pages = [
-              ("Principia_Mathematica", "principia_1plus1.png"),
-              ("George_Boole", "george_boole.jpg"),
-              ("Begriffsschrift", "frege_notation.png"),
-              ("Tractatus_Logico-Philosophicus", "tractatus_cover.jpg"),
-              ("Square_of_opposition", "square_opposition.png"),
-              ("Truth_table", "truth_tables.png"),
-              ("Boolean_algebra", "boolean_lattice.png"),
-              ("Hasse_diagram", "huntington_lattice.png"),
-              ("Exclusive_or", "xor_venn.png"),
-              ("Artificial_neural_network", "neural_network.png"),
-          ]
+          for filename in "${!urls[@]}"; do
+            url="${urls[$filename]}"
+            echo "Downloading $filename ..."
+            # Use wget which handles Wikimedia better
+            wget -q --timeout=30 -O "$filename" "$url" 2>&1
+            if [ -s "$filename" ]; then
+              sz=$(wc -c < "$filename")
+              if file "$filename" | grep -qE "PNG|JPEG|SVG|image"; then
+                echo "  OK: $sz bytes ($(file "$filename" | cut -d: -f2))"
+              else
+                echo "  WARN: $sz bytes but not image: $(head -c 50 "$filename")"
+                rm "$filename"
+              fi
+            else
+              echo "  FAIL: empty file"
+              rm "$filename"
+            fi
+          done
           
-          for wiki_page, filename in pages:
-              print(f"=== {wiki_page} -> {filename} ===")
-              try:
-                  # Fetch Wikipedia page
-                  url = f"https://en.wikipedia.org/wiki/{wiki_page}"
-                  req = urllib.request.Request(url, headers={"User-Agent": "ZhijianBot/1.0"})
-                  html = urllib.request.urlopen(req, timeout=15).read().decode()
-                  
-                  # Extract og:image URL
-                  match = re.search(r'<meta property="og:image" content="([^"]+)"', html)
-                  if match:
-                      img_url = match.group(1)
-                      print(f"  URL: {img_url[:100]}...")
-                      # Download
-                      urllib.request.urlretrieve(img_url, filename)
-                      size = os.path.getsize(filename)
-                      print(f"  OK: {size} bytes")
-                  else:
-                      print(f"  No og:image found")
-              except Exception as e:
-                  print(f"  ERROR: {e}")
-          
-          print("\n=== Results ===")
-          for f in os.listdir("."):
-              if os.path.isfile(f) and not f.endswith(".py"):
-                  sz = os.path.getsize(f)
-                  if sz > 500:
-                      print(f"  OK: {f} ({sz}B)")
-                  else:
-                      print(f"  FAIL: {f} ({sz}B)")
-          PYEOF
-          
-          python3 fetch.py
-          
+          echo ""
+          echo "=== Final Results ==="
+          ls -lh 2>/dev/null
+          echo "Total real images: $(ls *.png *.jpg 2>/dev/null | wc -l)"
       - name: Commit
         run: |
           git config user.name "Bot"; git config user.email "bot@zhijian.ai"
-          git add images/; git diff --staged --quiet || (git commit -m "v5: og:image extraction" && git push)
+          cd images && rm -f *.html *.json *.txt fetch.py 2>/dev/null
+          git add images/; git diff --staged --quiet || (git commit -m "v6: direct Wikimedia URLs" && git push)
