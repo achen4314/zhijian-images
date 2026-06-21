@@ -1,0 +1,45 @@
+import urllib.request, re, sys, os
+
+pages = [
+    ("Principia_Mathematica", "principia_1plus1.png"),
+    ("George_Boole", "george_boole.jpg"),
+    ("Begriffsschrift", "frege_notation.png"),
+    ("Tractatus_Logico-Philosophicus", "tractatus_cover.jpg"),
+    ("Square_of_opposition", "square_opposition.png"),
+    ("Truth_table", "truth_tables.png"),
+    ("Boolean_algebra", "boolean_lattice.png"),
+    ("Hasse_diagram", "huntington_lattice.png"),
+    ("Exclusive_or", "xor_venn.png"),
+    ("Artificial_neural_network", "neural_network.png"),
+]
+
+for wiki_page, filename in pages:
+    print(f"=== {wiki_page} -> {filename} ===")
+    try:
+        # Fetch Wikipedia page
+        url = f"https://en.wikipedia.org/wiki/{wiki_page}"
+        req = urllib.request.Request(url, headers={"User-Agent": "ZhijianBot/1.0"})
+        html = urllib.request.urlopen(req, timeout=15).read().decode()
+        
+        # Extract og:image URL
+        match = re.search(r'<meta property="og:image" content="([^"]+)"', html)
+        if match:
+            img_url = match.group(1)
+            print(f"  URL: {img_url[:100]}...")
+            # Download
+            urllib.request.urlretrieve(img_url, filename)
+            size = os.path.getsize(filename)
+            print(f"  OK: {size} bytes")
+        else:
+            print(f"  No og:image found")
+    except Exception as e:
+        print(f"  ERROR: {e}")
+
+print("\n=== Results ===")
+for f in os.listdir("."):
+    if os.path.isfile(f) and not f.endswith(".py"):
+        sz = os.path.getsize(f)
+        if sz > 500:
+            print(f"  OK: {f} ({sz}B)")
+        else:
+            print(f"  FAIL: {f} ({sz}B)")
